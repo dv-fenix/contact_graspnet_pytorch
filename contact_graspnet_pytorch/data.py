@@ -6,16 +6,17 @@ sys.path.append(os.path.join(BASE_DIR))
 sys.path.append(os.path.join(BASE_DIR, "contact_graspnet"))
 sys.path.append(os.path.join(BASE_DIR, "Pointnet_Pointnet2_pytorch"))
 
-from PIL import Image
 import argparse
-import numpy as np
 import copy
-import cv2
 import glob
+
+import cv2
+import numpy as np
+import provider
 import trimesh.transformations as tra
+from PIL import Image
 from scipy.spatial import cKDTree
 
-import provider
 from contact_graspnet_pytorch.scene_renderer import SceneRenderer
 
 
@@ -342,7 +343,7 @@ def load_available_input_data(p, K=None):
     :returns: All available data among segmap, rgb, depth, cam_K, pc_full, pc_colors
     """
 
-    segmap, rgb, depth, pc_full, pc_colors = None, None, None, None, None
+    segmap, rgb, depth, cam_K, pc_full, pc_colors = None, None, None, None, None, None
 
     if K is not None:
         if isinstance(K, str):

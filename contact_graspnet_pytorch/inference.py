@@ -1,18 +1,16 @@
+import argparse
 import glob
 import os
-import argparse
 
-import torch
 import numpy as np
-from contact_graspnet_pytorch.contact_grasp_estimator import GraspEstimator
-from contact_graspnet_pytorch import config_utils
-
-from contact_graspnet_pytorch.visualization_utils_o3d import (
-    visualize_grasps,
-    show_image,
-)
-from contact_graspnet_pytorch.checkpoints import CheckpointIO
+import torch
 from data import load_available_input_data
+
+from contact_graspnet_pytorch import config_utils
+from contact_graspnet_pytorch.checkpoints import CheckpointIO
+from contact_graspnet_pytorch.contact_grasp_estimator import GraspEstimator
+from contact_graspnet_pytorch.visualization_utils_o3d import (show_image,
+                                                              visualize_grasps)
 
 
 def inference(
@@ -22,7 +20,7 @@ def inference(
     local_regions=True,
     filter_grasps=True,
     skip_border_objects=False,
-    z_range=[0.2, 1.8],
+    z_range=[0.0, 1.8],
     forward_passes=1,
     K=None,
 ):
@@ -84,12 +82,14 @@ def inference(
         print(pc_full.shape)
 
         print("Generating Grasps...")
-        pred_grasps_cam, scores, contact_pts, _ = grasp_estimator.predict_scene_grasps(
-            pc_full,
-            pc_segments=pc_segments,
-            local_regions=local_regions,
-            filter_grasps=filter_grasps,
-            forward_passes=forward_passes,
+        pred_grasps_cam, scores, contact_pts, gripper_openings = (
+            grasp_estimator.predict_scene_grasps(
+                pc_full,
+                pc_segments=pc_segments,
+                local_regions=local_regions,
+                filter_grasps=filter_grasps,
+                forward_passes=forward_passes,
+            )
         )
 
         # Save results
@@ -107,7 +107,12 @@ def inference(
         # Visualize results
         show_image(rgb, segmap)
         visualize_grasps(
-            pc_full, pred_grasps_cam, scores, plot_opencv_cam=True, pc_colors=pc_colors
+            pc_full,
+            pred_grasps_cam,
+            scores,
+            plot_opencv_cam=True,
+            pc_colors=pc_colors,
+            gripper_openings=gripper_openings,
         )
 
     if not glob.glob(input_paths):
@@ -132,19 +137,19 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--z_range",
-        default=[0.2, 1.8],
+        default=[0.0, 1.8],
         help="Z value threshold to crop the input point cloud",
     )
     parser.add_argument(
         "--local_regions",
         action="store_true",
-        default=True,
+        default=False,
         help="Crop 3D local regions around given segments.",
     )
     parser.add_argument(
         "--filter_grasps",
         action="store_true",
-        default=True,
+        default=False,
         help="Filter grasp contacts according to segmap.",
     )
     parser.add_argument(

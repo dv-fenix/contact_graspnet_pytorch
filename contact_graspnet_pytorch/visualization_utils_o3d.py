@@ -1,17 +1,13 @@
 import os
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-
-import open3d as o3d
 
 import matplotlib.pyplot as plt
-from matplotlib import cm
-
-from scipy.spatial.transform import Rotation as R
-
 import mesh_utils
-
+import numpy as np
+import open3d as o3d
+import plotly.express as px
+import plotly.graph_objects as go
+from matplotlib import cm
+from scipy.spatial.transform import Rotation as R
 
 # To fix GLIB open3d error:
 # https://askubuntu.com/questions/1393285/how-to-install-glibcxx-3-4-29-on-ubuntu-20-04
@@ -159,7 +155,7 @@ def visualize_grasps(
     print("Visualizing...")
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(full_pc)
-    pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64) / 255)
+    # pcd.colors = o3d.utility.Vector3dVector(pc_colors.astype(np.float64) / 255)
 
     vis = o3d.visualization.Visualizer()
     vis.create_window()
