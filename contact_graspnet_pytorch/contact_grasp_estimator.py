@@ -1,19 +1,18 @@
 import importlib
-import numpy as np
-import torch
-import sys
 import os
+import sys
 import time
 
+import numpy as np
+import torch
+
 from contact_graspnet_pytorch import config_utils
-from contact_graspnet_pytorch.data import (
-    farthest_points,
-    distance_by_translation_point,
-    preprocess_pc_for_inference,
-    regularize_pc_point_count,
-    depth2pc,
-    reject_median_outliers,
-)
+from contact_graspnet_pytorch.data import (depth2pc,
+                                           distance_by_translation_point,
+                                           farthest_points,
+                                           preprocess_pc_for_inference,
+                                           regularize_pc_point_count,
+                                           reject_median_outliers)
 
 
 class GraspEstimator:
@@ -23,7 +22,7 @@ class GraspEstimator:
     :param cfg: config dict
     """
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, device: str = None):
 
         if "surface_grasp_logdir_folder" in cfg:
             # for sim evaluation
@@ -48,7 +47,10 @@ class GraspEstimator:
 
         print("model func: ", self._model_func)
 
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if device is not None:
+            self.device = device
+        else:
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model = self._model_func.ContactGraspnet(
             self._contact_grasp_cfg, self.device
         )
