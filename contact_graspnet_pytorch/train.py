@@ -1,14 +1,14 @@
-from genericpath import exists
+import argparse
 import os
 import sys
-import argparse
-from datetime import datetime
-import numpy as np
 import time
-from tqdm import tqdm
-from tensorboardX import SummaryWriter
+from datetime import datetime
+from genericpath import exists
 
+import numpy as np
 import torch
+import wandb  # Replaced tensorboardX
+from tqdm import tqdm
 
 os.environ["PYOPENGL_PLATFORM"] = "egl"  # To get pyrender to work headless
 
@@ -22,12 +22,11 @@ sys.path.append(os.path.join(BASE_DIR, "Pointnet_Pointnet2_pytorch"))
 
 import config_utils
 from acronym_dataloader import AcryonymDataset
-from contact_graspnet_pytorch.contact_graspnet import (
-    ContactGraspnet,
-    ContactGraspnetLoss,
-)
+
 from contact_graspnet_pytorch import utils
 from contact_graspnet_pytorch.checkpoints import CheckpointIO
+from contact_graspnet_pytorch.contact_graspnet import (ContactGraspnet,
+                                                       ContactGraspnetLoss)
 
 
 def train(global_config, log_dir):
@@ -64,7 +63,8 @@ def train(global_config, log_dir):
         grasp_estimator.parameters(), lr=global_config["OPTIMIZER"]["learning_rate"]
     )
 
-    logger = SummaryWriter(os.path.join(log_dir, "logs"))
+    # TensorBoard SummaryWriter removed here
+
     checkpoint_dir = os.path.join(log_dir, "checkpoints")
     checkpoint_io = CheckpointIO(checkpoint_dir, model=grasp_estimator, opt=opt)
 
@@ -121,10 +121,11 @@ def train(global_config, log_dir):
             loss.backward()
             opt.step()
 
-            for k, v in loss_info.items():
-                logger.add_scalar(f"train/{k}", v, it)
-
             # -- Logging -- #
+            # Replaced logger.add_scalar with wandb.log
+            for k, v in loss_info.items():
+                wandb.log({f"train/{k}": v}, step=it)
+
             # if print_every and it % print_every == 0:
             # print('[Epoch %02d] it=%03d, loss=%.4f, adds_loss=%.4f'% (epoch_it, it, loss, loss_info['adds_loss']))
 
@@ -141,7 +142,8 @@ def train(global_config, log_dir):
                     loss_val_best=metric_val_best,
                 )
 
-            logger.add_scalar("train/loss", loss.item(), it)
+            # Replaced logger.add_scalar with wandb.log
+            wandb.log({"train/loss": loss.item()}, step=it)
             pbar.set_postfix({"loss": loss.item(), "epoch": epoch_it})
 
             it += 1
@@ -160,7 +162,9 @@ def train(global_config, log_dir):
                     loss, loss_info = loss_fn(pred, data)
                     loss_log.append(loss.item())
                 val_loss = np.mean(loss_log)
-                logger.add_scalar("val/val_loss", val_loss, it)
+
+                # Replaced logger.add_scalar with wandb.log
+                wandb.log({"val/val_loss": val_loss}, step=it)
 
             if val_loss < metric_val_best:
                 metric_val_best = val_loss
@@ -241,6 +245,14 @@ if __name__ == "__main__":
 
     log_string(str(global_config))
     log_string("pid: %s" % (str(os.getpid())))
+
+    # Initialize WandB
+    wandb.init(
+        project="contact-graspnet",
+        config=global_config,
+        dir=ckpt_dir,
+        name=os.path.basename(ckpt_dir),
+    )
 
     train(global_config, ckpt_dir)
 
