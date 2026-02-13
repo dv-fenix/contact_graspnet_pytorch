@@ -42,7 +42,7 @@ def train(global_config, log_dir):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = torch.device('cpu')
     batch_size = global_config["OPTIMIZER"]["batch_size"]
-    num_workers = 0  # Increase after debug
+    num_workers = 12  # Increase after debug
     train_dataset = AcryonymDataset(
         global_config, train=True, device=device, use_saved_renders=True
     )

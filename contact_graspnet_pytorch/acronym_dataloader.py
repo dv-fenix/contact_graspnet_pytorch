@@ -1,28 +1,27 @@
 import os
-import sys
 import random
+import sys
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(BASE_DIR))
 sys.path.append(os.path.join(BASE_DIR, "Pointnet_Pointnet2_pytorch"))
 
-from PIL import Image
 import argparse
-import numpy as np
 import copy
-import cv2
 import glob
-import trimesh.transformations as tra
-from scipy.spatial import cKDTree
 
+import cv2
+import numpy as np
 import provider
-from contact_graspnet_pytorch.scene_renderer import SceneRenderer
-
 import torch
 import torch.nn.functional as F
+import trimesh.transformations as tra
+from PIL import Image
+from scipy.spatial import cKDTree
 from torch.utils.data import Dataset
 
 from contact_graspnet_pytorch import utils
+from contact_graspnet_pytorch.scene_renderer import SceneRenderer
 
 """
 Missing objects:
@@ -136,8 +135,10 @@ class AcryonymDataset(Dataset):
 
         self._current_pc = None
         self._cache = {}
+        self._contact_cache = {}
 
-        self._renderer = SceneRenderer(caching=True, intrinsics=intrinsics)
+        self._renderer = None
+        self._intrinsics = intrinsics  # Save config for lazy init
 
         if use_uniform_quaternions:
             raise NotImplementedError
@@ -165,6 +166,12 @@ class AcryonymDataset(Dataset):
 
         self._num_renderable_cam_poses = len(self._cam_orientations)
         self._num_saved_cam_poses = 200  # TODO: Make this a config
+
+    @property
+    def renderer(self):
+        if self._renderer is None:
+            self._renderer = SceneRenderer(caching=True, intrinsics=self._intrinsics)
+        return self._renderer
 
     def __getitem__(self, index):
         """
@@ -216,6 +223,7 @@ class AcryonymDataset(Dataset):
             if os.path.exists(render_path):
                 try:
                     pc_cam, camera_pose = self.load_scene(render_path)
+                    pc_cam = self._augment_pc(pc_cam)
                     pc_normals = np.array([])
                     depth = np.array([])
                 except:
@@ -397,12 +405,18 @@ class AcryonymDataset(Dataset):
         return scene_contacts_dir, valid_scene_contacts
 
     def _load_contacts(self, scene_id):
-        """
-        Loads contact information for a given scene
-        """
-        return np.load(
+        if self._caching and scene_id in self._contact_cache:
+            return self._contact_cache[scene_id]
+
+        data = np.load(
             os.path.join(self.scene_contacts_dir, scene_id + ".npz"), allow_pickle=True
         )
+        # Convert NpzFile to dict to force loading into RAM
+        data = {k: data[k] for k in data.files}
+
+        if self._caching:
+            self._contact_cache[scene_id] = data
+        return data
 
     def _process_contacts(self, scene_contact_points, grasp_transforms):
         """
@@ -514,7 +528,7 @@ class AcryonymDataset(Dataset):
 
         cam_pose = extrinsics.dot(self._coordinate_transform)
         # table height
-        cam_pose[2, 3] += self._renderer._table_dims[2]
+        cam_pose[2, 3] += self.renderer._table_dims[2]
         cam_pose[:3, :2] = -cam_pose[:3, :2]
         return cam_pose
 
@@ -625,12 +639,10 @@ class AcryonymDataset(Dataset):
         in_camera_pose = copy.deepcopy(camera_pose)
 
         # 0.005 s
-        _, depth, _, camera_pose = self._renderer.render(
-            in_camera_pose, render_pc=False
-        )
+        _, depth, _, camera_pose = self.renderer.render(in_camera_pose, render_pc=False)
         depth = self._augment_depth(depth)
 
-        pc = self._renderer._to_pointcloud(depth)
+        pc = self.renderer._to_pointcloud(depth)
         pc = utils.regularize_pc_point_count(
             pc, self._raw_num_points, use_farthest_point=self._use_farthest_point
         )
@@ -648,23 +660,13 @@ class AcryonymDataset(Dataset):
         return pc, pc_normals, camera_pose, depth
 
     def load_scene(self, render_path):
-        """
-        Return point cloud and camera pose.  Used for loading saved renders.
-        Arguments:
-            scene_id {str} -- scene index
-            cam_pose_id {str} -- camera pose index as length 3 string with
-                                leading zeros if necessary.
-
-        Returns:
-            [pc, camera_pose] -- [point cloud, camera pose]
-            or returns False if not found
-        """
-        # print('Loading: ', render_path)
-        data = np.load(render_path, allow_pickle=True)
-        pc_cam = data["pc_cam"]
-        camera_pose = data["camera_pose"]
-        pc_cam_aug = self._augment_pc(pc_cam)
-        return pc_cam_aug, camera_pose
+        # data = np.load(render_path, allow_pickle=True)
+        # Use a context manager to ensure the file handle is closed
+        with np.load(render_path, allow_pickle=True) as data:
+            pc_cam = data["pc_cam"]
+            camera_pose = data["camera_pose"]
+        # REMOVED self._augment_pc call here to allow clean caching
+        return pc_cam, camera_pose
 
     def change_object(self, cad_path, cad_scale):
         """
@@ -675,7 +677,7 @@ class AcryonymDataset(Dataset):
             cad_scale {float} -- scale of CAD model
         """
 
-        self._renderer.change_object(cad_path, cad_scale)
+        self.renderer.change_object(cad_path, cad_scale)
 
     def change_scene(self, obj_paths, obj_scales, obj_transforms, visualize=False):
         """
@@ -689,7 +691,7 @@ class AcryonymDataset(Dataset):
         Keyword Arguments:
             visualize {bool} -- whether to update the visualizer as well (default: {False})
         """
-        self._renderer.change_scene(obj_paths, obj_scales, obj_transforms)
+        self.renderer.change_scene(obj_paths, obj_scales, obj_transforms)
         if visualize:
             self._visualizer.change_scene(obj_paths, obj_scales, obj_transforms)
 
